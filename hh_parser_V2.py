@@ -80,6 +80,7 @@ def get_vacancy_skills(vacancy_id):
     url = f'https://api.hh.ru/vacancies/{vacancy_id}'
     headers = {
         'Authorization': f'Bearer {hh_api_token}'
+        
     }
 
     response = requests.get(url, headers=headers)

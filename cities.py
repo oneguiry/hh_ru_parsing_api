@@ -6,13 +6,14 @@ import time
 import logging
 import urllib3
 import certifi
+import json
 from requests.exceptions import ConnectTimeout
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 
-hh_api_token = ''
+hh_api_token = 'APPLTJAD5L9L62GC804UD8B0RD1COQT79CLDFH0Q8PN2A44MUCMJA681KAGUREI2'
 
 db_config = {
     'dbname': 'parser',
@@ -127,7 +128,7 @@ def get_vacancy(area_id, professional_role, page):
             response.raise_for_status()
         except ConnectTimeout:
             print("Превышено время ожидания")
-            time.sleep(3)
+            time.sleep(1)
         except requests.exceptions.RequestException as e:
             print(f"Ошибка запроса: {e}")
     return response.json()
@@ -144,7 +145,7 @@ def get_vacancy_skills(vac_id):
             response = requests.get(url, headers=headers, proxies={}, verify=certifi.where(), timeout=30)
         except ConnectTimeout:
             print("Превышено время ожидания, новая попытка")
-            time.sleep(3)
+            time.sleep(1)
         except requests.exceptions.RequestException as e:
             print(f"Ошибка запроса: {e}")
     data = response.json()
@@ -153,6 +154,12 @@ def get_vacancy_skills(vac_id):
     if len(skills_str) > 1000:
         skills_str = skills_str[:1000]
     return skills_str
+
+def check_role_vacancy(role_name: str):
+    with open("roles.txt", "r", encoding="utf-8") as file:
+        roles = json.loads(file.read())
+        return any(role['name'] == role_name for role in roles)
+
 
 def get_vacancies():
     areas, all_variant_roles = get_areas_roles()
@@ -173,6 +180,21 @@ def get_vacancies():
                     max_page = data.get('pages')
                     with conn.cursor() as cursor:
                         for item in data['items']:
+                            employer = item['employer']             #1 
+                            employer_id = employer['id']            #2
+                            employer_name = employer['name']        #3
+                            archived = item['archived']             #4
+                            snippet = item['snippet']               
+                            requirement = snippet['requirement']    #5
+                            responsibility = snippet['responsibility'] #6
+                            accredited_it_employer = employer['accredited_it_employer']
+                            trusted_company = employer['trusted']
+                            professional_roles = item['professional_roles'][0]['name']
+                            res = check_role_vacancy(professional_roles)
+                            print(res)
+                            print(professional_roles)
+                            #print(employer_id, employer_name, archived, requirement, responsibility, accredited_it_employer, trusted_company)
+                            break
                             title = item['name']
                             area = item['area'].get('name')
                             if item.get('salary'):
@@ -209,10 +231,10 @@ def get_vacancies():
                                         (title, area, salary_from, salary_to, id_vac, skills, status_vac, published_at, url, experience, employment, professional_roles, working_hours, work_format, schedule))
                             conn.commit()
                         #logging.info(f"Данные по странице {page} проффессии {vacancy} сохранены")
-                        time.sleep(2)
                         page += 1
                 except requests.HTTPError as e:
                     print(f"Ошибка при обработке города {city}: {e}")
+                    time.sleep(1)
                     continue 
         conn.commit()
     logging.info("Парсинг завершен")
