@@ -11,6 +11,7 @@ from requests.exceptions import ConnectTimeout
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# https://github.com/hhru/api/blob/master/README.md
 
 
 hh_api_token = 'APPLTJAD5L9L62GC804UD8B0RD1COQT79CLDFH0Q8PN2A44MUCMJA681KAGUREI2'
@@ -44,7 +45,14 @@ def create_table(conn):
             professional_roles VARCHAR(200),
             working_hours VARCHAR(50),
             work_format VARCHAR(50),
-            schedule VARCHAR(50)
+            schedule VARCHAR(50),
+            employer_id VARCHAR(30),
+            employer_name VARCHAR(200),
+            archived VARCHAR(20),
+            requirement VARCHAR(1000),
+            responsibility VARCHAR(1000),
+            trusted_company VARCHAR(50),
+            accredited_it_employer VARCHAR(50)
         )
     """
     cursor.execute(create_table_query)
@@ -107,13 +115,11 @@ def get_areas_roles():
 
     return areas, professional_roles
 
-def get_vacancy(area_id, professional_role, page):
+def get_vacancy(area_id, page):
     url = 'https://api.hh.ru/vacancies'
     params = {
         "area": area_id,
-        "industry": 7,
         "page": page,
-        #"text": {professional_role},
         "host": "hh.ru"
     }
     headers = {
@@ -174,27 +180,35 @@ def get_vacancies():
             max_page = 100
             while page < max_page - 1:
                 try:
-                    data = get_vacancy(city_id, None, page)
+                    data = get_vacancy(city_id, page)
                     if not data.get('items'):
                         break
                     max_page = data.get('pages')
                     with conn.cursor() as cursor:
                         for item in data['items']:
                             employer = item['employer']             #1 
+                            snippet = item['snippet']
+
                             employer_id = employer['id']            #2
                             employer_name = employer['name']        #3
                             archived = item['archived']             #4
-                            snippet = item['snippet']               
+                                           
                             requirement = snippet['requirement']    #5
                             responsibility = snippet['responsibility'] #6
+                            #print(requirement, type(requirement))
+                            #print(responsibility, type(responsibility))
+                            if requirement and len(requirement) > 1000:
+                                requirement = requirement[:1000]
+                            
+                            if responsibility and len(responsibility) > 1000:
+                                responsibility = responsibility[:1000]
+                        
                             accredited_it_employer = employer['accredited_it_employer']
                             trusted_company = employer['trusted']
                             professional_roles = item['professional_roles'][0]['name']
-                            res = check_role_vacancy(professional_roles)
-                            print(res)
-                            print(professional_roles)
-                            #print(employer_id, employer_name, archived, requirement, responsibility, accredited_it_employer, trusted_company)
-                            break
+
+                            if check_role_vacancy(professional_roles) == False:
+                                continue                           
                             title = item['name']
                             area = item['area'].get('name')
                             if item.get('salary'):
@@ -224,12 +238,14 @@ def get_vacancies():
 
                             insert_query = """
                             INSERT INTO vacancies_top 
-                            (title, area, salary_from, salary_to, id_vac, skills, status_vac, published_at, url, experience, employment, professional_roles, working_hours, work_format, schedule) 
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            (title, area, salary_from, salary_to, id_vac, skills, status_vac, published_at, url, experience, employment, professional_roles, working_hours, work_format, schedule, employer_id, employer_name, archived, requirement, responsibility, trusted_company, accredited_it_employer) 
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             """
                             cursor.execute(insert_query,
-                                        (title, area, salary_from, salary_to, id_vac, skills, status_vac, published_at, url, experience, employment, professional_roles, working_hours, work_format, schedule))
+                                        (title, area, salary_from, salary_to, id_vac, skills, status_vac, published_at, url, experience, employment, professional_roles, working_hours, work_format, schedule,
+                                        employer_id, employer_name, archived, requirement, responsibility, trusted_company, accredited_it_employer))
                             conn.commit()
+                            print("Новая запись")
                         #logging.info(f"Данные по странице {page} проффессии {vacancy} сохранены")
                         page += 1
                 except requests.HTTPError as e:
